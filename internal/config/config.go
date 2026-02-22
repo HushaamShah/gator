@@ -20,7 +20,7 @@ func Read() (Config, error) {
 		return Config{}, err
 	}
 
-	content, err := os.ReadFile(UserHomeDir + "/golang/gator/.gatorconfig.json")
+	content, err := os.ReadFile(UserHomeDir + "/.gatorconfig.json")
 	if err != nil {
 		fmt.Println("Error reading config file:", err)
 		return Config{}, err
@@ -48,7 +48,7 @@ func (c *Config) SetUser(name string) {
 		return
 	}
 
-	err = os.WriteFile(UserHomeDir+"/golang/gator/.gatorconfig.json", data, 0644)
+	err = os.WriteFile(UserHomeDir+"/.gatorconfig.json", data, 0644)
 	if err != nil {
 		fmt.Println("Error writing config file:", err)
 		return
