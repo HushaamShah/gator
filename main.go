@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
+	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -28,6 +32,22 @@ type commands struct {
 	commands map[string]func(*state, command) error
 }
 
+type RSSFeed struct {
+	Channel struct {
+		Title       string    `xml:"title"`
+		Link        string    `xml:"link"`
+		Description string    `xml:"description"`
+		Item        []RSSItem `xml:"item"`
+	} `xml:"channel"`
+}
+
+type RSSItem struct {
+	Title       string `xml:"title"`
+	Link        string `xml:"link"`
+	Description string `xml:"description"`
+	PubDate     string `xml:"pubDate"`
+}
+
 func (c *commands) run(s *state, cmd command) error {
 	if val, ok := c.commands[cmd.name]; ok {
 		return val(s, cmd)
@@ -46,6 +66,8 @@ func main() {
 	commands.register("register", handlerRegister)
 	commands.register("reset", handlerReset)
 	commands.register("users", handlerUsers)
+	commands.register("agg", handleAggregate)
+
 	dbconfig, err := config.Read()
 	if err != nil {
 		fmt.Println("Error reading config file:", err)
@@ -120,7 +142,6 @@ func handlerUsers(s *state, cmd command) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%#v\n", s.dbconfig)
 	for _, user := range users {
 		if user == s.dbconfig.User {
 			fmt.Printf("* %s (current) \n", user)
@@ -129,4 +150,51 @@ func handlerUsers(s *state, cmd command) error {
 		fmt.Printf("* %s \n", user)
 	}
 	return nil
+}
+
+func handleAggregate(s *state, cmd command) error {
+	url := "https://www.wagslane.dev/index.xml"
+	feed, err := fetchFeed(context.Background(), url)
+	if err != nil {
+		return err
+	}
+	fmt.Println(feed)
+	return nil
+}
+
+func fetchFeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
+	xmlBody := RSSFeed{}
+	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	req.Header.Set("user-agent", "gator")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	err1 := xml.Unmarshal(body, &xmlBody)
+	if err1 != nil {
+		fmt.Println(err1)
+		return nil, err1
+	}
+
+	xmlBody.Channel.Title = html.UnescapeString(xmlBody.Channel.Title)
+	xmlBody.Channel.Description = html.UnescapeString(xmlBody.Channel.Description)
+
+	for i := range xmlBody.Channel.Item {
+		xmlBody.Channel.Item[i].Title = html.UnescapeString(xmlBody.Channel.Item[i].Title)
+		xmlBody.Channel.Item[i].Description = html.UnescapeString(xmlBody.Channel.Item[i].Description)
+	}
+
+	return &xmlBody, nil
 }
