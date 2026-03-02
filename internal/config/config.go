@@ -30,7 +30,6 @@ func Read() (Config, error) {
 		fmt.Println("Error unmarshalling config file:", err1)
 		return Config{}, err1
 	}
-	fmt.Println(config)
 	return config, nil
 }
 

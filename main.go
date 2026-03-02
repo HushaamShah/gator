@@ -3,18 +3,11 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/xml"
-	"errors"
 	"fmt"
-	"html"
-	"io"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/HushaamShah/gator/internal/config"
 	"github.com/HushaamShah/gator/internal/database"
-	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -67,6 +60,8 @@ func main() {
 	commands.register("reset", handlerReset)
 	commands.register("users", handlerUsers)
 	commands.register("agg", handleAggregate)
+	commands.register("addfeed", handleAddFeed)
+	commands.register("feeds", handleFeeds)
 
 	dbconfig, err := config.Read()
 	if err != nil {
@@ -93,41 +88,6 @@ func main() {
 	}
 }
 
-func handlerLogin(s *state, cmd command) error {
-	if len(cmd.args) == 0 {
-		return fmt.Errorf("login command requires a username")
-	}
-	_, err := s.queries.GetUser(context.Background(), cmd.args[0])
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			fmt.Println("User not Found")
-		}
-		return err
-	}
-
-	s.dbconfig.SetUser(cmd.args[0])
-	fmt.Println("User has been set.")
-
-	return nil
-}
-
-func handlerRegister(s *state, cmd command) error {
-	var args database.CreateUserParams
-	args.ID = uuid.New()
-	args.CreatedAt = time.Now()
-	args.UpdatedAt = time.Now()
-	args.Name = cmd.args[0]
-
-	user, err := s.queries.CreateUser(context.Background(), args)
-	if err != nil {
-		return err
-	}
-	fmt.Println("USER: ")
-	fmt.Println(user)
-	s.dbconfig.SetUser(cmd.args[0])
-	return nil
-}
-
 func handlerReset(s *state, cmd command) error {
 	err := s.queries.DeleteAllUsers(context.Background())
 	if err != nil {
@@ -135,66 +95,4 @@ func handlerReset(s *state, cmd command) error {
 	}
 	fmt.Println("All User Deleted!")
 	return nil
-}
-
-func handlerUsers(s *state, cmd command) error {
-	users, err := s.queries.GetUsers(context.Background())
-	if err != nil {
-		return err
-	}
-	for _, user := range users {
-		if user == s.dbconfig.User {
-			fmt.Printf("* %s (current) \n", user)
-			continue
-		}
-		fmt.Printf("* %s \n", user)
-	}
-	return nil
-}
-
-func handleAggregate(s *state, cmd command) error {
-	url := "https://www.wagslane.dev/index.xml"
-	feed, err := fetchFeed(context.Background(), url)
-	if err != nil {
-		return err
-	}
-	fmt.Println(feed)
-	return nil
-}
-
-func fetchFeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
-	xmlBody := RSSFeed{}
-	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	req.Header.Set("user-agent", "gator")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		fmt.Println(err)
-		return nil, err
-	}
-
-	err1 := xml.Unmarshal(body, &xmlBody)
-	if err1 != nil {
-		fmt.Println(err1)
-		return nil, err1
-	}
-
-	xmlBody.Channel.Title = html.UnescapeString(xmlBody.Channel.Title)
-	xmlBody.Channel.Description = html.UnescapeString(xmlBody.Channel.Description)
-
-	for i := range xmlBody.Channel.Item {
-		xmlBody.Channel.Item[i].Title = html.UnescapeString(xmlBody.Channel.Item[i].Title)
-		xmlBody.Channel.Item[i].Description = html.UnescapeString(xmlBody.Channel.Item[i].Description)
-	}
-
-	return &xmlBody, nil
 }
