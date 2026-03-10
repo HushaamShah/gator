@@ -60,13 +60,7 @@ func fetchFeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 	return &xmlBody, nil
 }
 
-func handleAddFeed(s *state, cmd command) error {
-	userDetails, err := s.queries.GetUser(context.Background(), s.dbconfig.User)
-	if err != nil {
-		return err
-	}
-
-	// feed, _ := fetchFeed(context.Background(), cmd.args[1])
+func handleAddFeed(s *state, cmd command, userDetails database.User) error {
 
 	args := database.CreateFeedParams{
 		ID:        uuid.New(),
@@ -76,9 +70,14 @@ func handleAddFeed(s *state, cmd command) error {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	_, err1 := s.queries.CreateFeed(context.Background(), args)
+	insertedFeed, err1 := s.queries.CreateFeed(context.Background(), args)
 	if err1 != nil {
 		return err1
+	}
+
+	_, err2 := addFollowEntryForUser(s, insertedFeed.ID, userDetails)
+	if err2 != nil {
+		return err2
 	}
 	return nil
 }

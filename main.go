@@ -60,8 +60,11 @@ func main() {
 	commands.register("reset", handlerReset)
 	commands.register("users", handlerUsers)
 	commands.register("agg", handleAggregate)
-	commands.register("addfeed", handleAddFeed)
+	commands.register("addfeed", middlewareLoggedIn(handleAddFeed))
 	commands.register("feeds", handleFeeds)
+	commands.register("follow", middlewareLoggedIn(handleFollow))
+	commands.register("following", middlewareLoggedIn(handleFollowing))
+	commands.register("unfollow", middlewareLoggedIn(handleUnfollow))
 
 	dbconfig, err := config.Read()
 	if err != nil {
@@ -95,4 +98,14 @@ func handlerReset(s *state, cmd command) error {
 	}
 	fmt.Println("All User Deleted!")
 	return nil
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, c command) error {
+		userDetails, err := s.queries.GetUser(context.Background(), s.dbconfig.User)
+		if err != nil {
+			return err
+		}
+		return handler(s, c, userDetails)
+	}
 }
